@@ -190,12 +190,7 @@
     margin-bottom: 0
 }
 
-code.has-jax {
-    -webkit-font-smoothing: antialiased;
-    background: inherit !important;
-    border: none !important;
-    font-size: 100%;
-}
+
 
 .post-content .highlighttable td .highlight pre code::-webkit-scrollbar {
     display: none

@@ -1,8 +1,11 @@
 ---
 title: "Bayes Capstone: (Pseudo) Bayesian Model Averaging"
 author: "Ellen Graham, Esther Swehla, Josh Upadhyay"
-date: "5/1/2020"
+date: 2020-05-01T21:13:14-05:00
+categories: ["Projects"]
+tags: ["Bayes", "markov", "Capstone"]
 bibliography: Library.bib
+weight: 1
 output: 
   html_document:
     toc: true
@@ -61,7 +64,7 @@ The first half of WAIC uses the posterior distribution of $\theta$, as opposed t
 
 ## Bayesian Model Averaging 
 
-Bayesian Model Averaging (BMA) offers an alternative to information criterion that helps ensure findings are robust to a variety of model specifications. At its simplest level, BMA assigns priors to potential model specifications and then caluclates posterior distributions for the model itself, in addition to the coefficients within the specification. This is thus an extension of previous Bayesian theory that focuses solely on coefficient estimation. 
+Bayesian Model Averaging (BMA) offers an alternative to information criterion that helps ensure findings are robust to a variety of model specifications. At its simplest level, BMA assigns priors to potential model specifications and then calculates posterior distributions for the model itself, in addition to the coefficients within the specification. This is thus an extension of previous Bayesian theory that focuses solely on coefficient estimation. 
 
 Let us begin by considering a matrix $X$ of all the $n \times p$ potential independent variables to predict a response variable $Y$. A standard linear analysis would assume $Y = X \beta + \epsilon$, where $\beta$ is a coefficient matrix and $\epsilon$ ~ $N(0, \sigma^2)$. There are $q=2^p$ potential model specifications from the model space $\{M_1, M_2, ...M_q\}$, and in many cases, there is ambiguity about which of these is best. BMA incorporates this uncertainty into the process rather than ignoring it and claiming that the final model is the only option. This leads to greater flexibility in the inferences of the end results [@Montgomery]. 
 
@@ -92,7 +95,7 @@ By adding a complicated bias term, this can be turned into an information criter
 
 While exact LOO requires $n$ iterations, one for each point in $y$, Pseudo-BMA reduces computational complexity by taking samples from the posterior distribution. Using a technique called Pareto Smoothed Importance Sampling (PSIS), LOO-CV is estimated. This method also allows Pseudo-BMA to be used on models with parameters that have already been fitted. 
 
-Given a dataset $y$, models $M_k$, weights $w_{i,k}^s$, and parameters $\theta$, PSIS-LOO is an efficent way to approximate the estimate of the expected log pointwise predictive density for model k, which is the measure of how good model k is at fitting out of sample data:
+Given a dataset $y$, models $M_k$, weights $w_{i,k}^s$, and parameters $\theta$, PSIS-LOO is an efficient way to approximate the estimate of the expected log pointwise predictive density for model k, which is the measure of how good model k is at fitting out of sample data:
 
 \[
 \widehat{elpd}^k=\sum_{i=1}^n log(\hat{p} (y_i | y_1,\dots y_{i-1},y_{i+1},y_n, M_K))

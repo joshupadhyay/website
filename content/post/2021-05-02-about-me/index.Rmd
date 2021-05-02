@@ -1,0 +1,17 @@
+---
+title: "about me"
+output: html_document
+---
+
+
+```{r, include=FALSE}
+library(knitr)
+```
+
+```{r, out.width = "300px", fig.align = "center", echo=FALSE}
+knitr::include_graphics("yourphoto.jpg")
+```
+
+My name is Josh Upadhyay, and I'm a senior at Macalester College, MN. This is just a quick showcase of my quick projects / exploration in data science, and an impromptu blog on what I've been doing. You can reach me at **joshupad@gmail.com**.
+
+

@@ -1,0 +1,495 @@
+---
+title: "Airbnb Seattle"
+author: "Josh U"
+date: 2019-05-015T21:15:32-05:00
+categories: ["Projects"]
+tags: ["Seattle", "Airbnb", "ggplot"]
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    collapsed: false
+    number_sections: false
+    toc_depth: 1
+    #code_folding: hide
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(lubridate)
+library(gridExtra)
+library(mapview)
+library(ggmap)
+library(leaflet)
+library(kableExtra)
+library(stopwords)
+library(lexicon)
+library(stringr)
+library(textclean)
+library(tm)
+library(wordcloud)
+```
+
+First, I call in my datasets and clean up the variables. This includes formatting the dates properly, as well as removing strangle symbols from the csv files:
+
+```{r, cache=TRUE}
+listings = read.csv("datasets/listings.csv")
+reviews = read.csv("datasets/reviews.csv")
+calendar = read.csv("datasets/calendar.csv")
+```
+
+```{r,warning = FALSE}
+#cleaning up listings price
+
+listings$price = as.numeric(gsub("\\$", "", listings$price))
+listings$weekly_price = as.numeric(gsub("\\$", "", listings$weekly_price))
+listings$monthly_price = as.numeric(gsub("\\$", "", listings$monthly_price))
+listings$cleaning_fee = as.numeric(gsub("\\$", "", listings$cleaning_fee))
+
+
+```
+
+```{r, echo=FALSE,warning = FALSE}
+
+#cleaning up reviews
+reviews$date <- as.Date(reviews$date)
+
+reviews <- reviews %>%
+  mutate(month = format(date, "%m"), year = format(date, "%Y"))
+
+```
+
+
+```{r, cache=TRUE, echo = FALSE,warning = FALSE}
+
+reviewed_listings <- listings %>%
+  left_join(reviews, by = c('id' = 'listing_id'))
+
+housing_points <- reviewed_listings
+
+
+
+```
+
+
+```{r, cache=TRUE, echo=FALSE, warning = FALSE}
+housing_points %>%
+  group_by(property_type) %>%
+  summarize(num = n()) %>%
+  arrange(desc(num))
+
+#choose top 5 property types to display 
+
+poptypes <- c('House', 'Apartment', 'Townhouse', 'Condonminium', 'Loft')
+
+housemap <- housing_points %>%
+  filter(property_type == poptypes) %>%
+  distinct(longitude, latitude, property_type)
+
+
+
+```
+
+
+
+**Map of Most Popular Housing Types in Seattle**
+```{r, echo = FALSE}
+library(wesanderson)
+
+#FF7C08, #DAF7A6, #15EA63  , #1576EA  , #B715EA
+
+factpal <- colorFactor(palette = c("red", "green", "blue", "wheat", "black"), levels = levels(housemap$property_type))
+
+leaflet(housing_points) %>%
+  addProviderTiles(providers$CartoDB) %>%
+  setView(-122.3672, 47.61068 , zoom = 10.5) %>%
+  addCircleMarkers(housemap$longitude, housemap$latitude, 
+                   weight = 1, radius = 3, fillOpacity = 0.4, 
+                   color = ~factpal(housemap$property_type), popup = housemap$property_type)
+
+  
+```
+
+The data represents a year's worth of Airbnb bookings and reviews starting from Jan 16th, 2016. Using the data provided, I aim to leverage the data to help both hosts and guests. 
+
+
+
+# When are Airbnbs the busiest? 
+```{r, cache= TRUE, echo = FALSE}
+
+
+n_reviewers <- reviews %>%
+  group_by(month) %>%
+  summarize(nreviewers = n()) %>%
+  ggplot() + geom_point(aes(x = month, y = nreviewers)) + labs(title = 'Number of Reviewers by Month', subtitle = 'Counted, separated by month')
+
+```
+
+
+```{r, echo = FALSE}
+n_reviewers
+```
+
+Given that AirBnb review requests are sent to people immediately after they stay in the booking, I've made the assumption that all reviews have been made right after people exited their AirBnb. Based on this, it seems as though August is the time that most people stay in an Airbnb. 
+
+```{r, echo = FALSE, cache = TRUE}
+#dummy var.. probably a MUCH faster way to do this exists
+calendar <- calendar %>% 
+  mutate(avail_n = replace(calendar$availible, calendar$available == 'f', 0))
+calendar$avail_n <- replace_na(calendar$avail_n, 1)
+
+calendar$date <- ymd(calendar$date)
+
+calendar <- calendar %>%
+  mutate(d_month = format(date, "%m"), d_year = format(date, "%y"))
+
+booked_month <- calendar %>%
+  group_by(listing_id, d_month) %>%
+  summarize(percent_booked =  1- ((sum(avail_n)) / 31))
+
+
+```
+
+```{r, cache=TRUE, echo = FALSE}
+id3335 <- booked_month %>%
+  filter(listing_id == 3335) %>%
+  ggplot() + geom_point(aes(d_month, y = percent_booked)) + labs(title = "ID 3335", x = 'Month', y = 'Percent Booked')
+
+id2800448 <- booked_month %>%
+  filter(listing_id == 2800448) %>%
+  ggplot() + geom_point(aes(d_month, y = percent_booked)) + labs(title = "ID 2800448", x = 'Month', y = 'Percent Booked')
+
+id2830174 <- booked_month %>%
+  filter(listing_id == 2830174) %>%
+  ggplot() + geom_point(aes(d_month, y = percent_booked)) + labs(title = "ID 2830174", x = 'Month', y = 'Percent Booked')
+
+id6411259 <- booked_month %>%
+  filter(listing_id == 6411259) %>%
+  ggplot() + geom_point(aes(d_month, y = percent_booked)) + labs(title = "ID 6411259", x = 'Month', y = 'Percent Booked')
+
+grid.arrange(id3335,id2800448, id2830174,id6411259)
+```
+
+Interestingly, various AirBnbs are booked up at different times of the year - I wonder if this matters depending on location? (All 4 also seem to be highly booked up in January). With all the competition in Seattle, I didn't expect some AirBnbs to be so successful like ID 6411259 or 2800448, but it's interesting how 3335 and 2830174 are highly booked in January, when 6411259 isn't so highly booked. 
+
+**(Percent Booked is calculated by adding up the number of days the Airbnb was availible in a month, then dividing that by 31. One minus this gives us the booking percentage).**
+
+
+```{r, echo = FALSE}
+book_percentage <- booked_month %>%
+  group_by(d_month) %>%
+  summarize(agg = mean(percent_booked)) %>%
+  ggplot() + geom_point(aes(d_month, agg)) + labs(x = "Month", y = "Average % Booked", title = "How Full are AirBnbs In Seattle?", subtitle = "Jan 17, 2016 - 2017")
+```
+
+
+Interestingly, if we assume people write a review right after they stay, (speaking from AirBnb experience, they send an email right after you leave - if you don't write a review then, you most likely won't) we can see two different trends between the "number of reviewers" and the fullness of AirBnbs:
+```{r, echo = FALSE}
+grid.arrange(book_percentage, n_reviewers)
+```
+
+While Airbnbs are more full in January, it appears that there are more unique reviewers in August. This may indicate a higher turnover rate in August with shorter stays per guest compared to fewer, longer-staying guests in Janurary. 
+
+
+**(EDIT: I'd love to calculate this, but haven't found a good way to do so yet).**
+
+# More Overviews:
+
+Let's quickly break down the average price by neighborhood (I'll deal with amenities and so forth later): 
+```{r}
+reviewed_listings %>%
+  select(id, neighbourhood, property_type, price, latitude, longitude)%>%
+  distinct(id, .keep_all = TRUE) %>%
+  drop_na() %>%
+  group_by(neighbourhood)%>%
+  summarize(avgprice = mean(price)) %>%
+  arrange(desc(avgprice)) %>%
+  head()
+```
+
+#For hosts: What factors are most important in increasing how often your place is booked? 
+To account for popular AirBnbs, I added the percentage booked of that AirBnb in a given year, as a statistic for 'popularity' - which should positively correlate with future increased bookings. Cleaning the dataset
+
+```{r, echo = FALSE}
+calendar_listings <- calendar %>%
+  left_join(listings, by = c('listing_id' = 'id')) 
+
+book_percentage_total <-  calendar_listings %>%
+  group_by(listing_id)%>%
+  summarize(booking_percentage = 1 - (sum(avail_n) / 365))
+
+
+calendar_listings <- calendar_listings %>%
+  left_join(book_percentage_total, by = 'listing_id')
+
+bookings_by_neighborhood <- calendar_listings %>%
+  group_by(listing_id, neighbourhood) %>%
+  summarize(avgpercentage = mean(booking_percentage))
+```
+
+As I'll be using average percentage booked to determine how popular neighborhoods are, I'll ensure that there is more than 1 property per neighborhood (as I learned the hard way). To do this, I dummy encoded the 5 most popular rental types ('House', 'Apartment', 'Townhouse', 'Condonminium', 'Loft') then filtered out neighborhoods with less than 20 properties. 
+
+```{r}
+housing_points_dummied <- fastDummies::dummy_cols(housing_points, select_columns = "property_type")
+```
+
+```{r}
+housing_enough <- housing_points_dummied %>%
+  group_by(neighbourhood) %>%
+  summarize(apt = sum(property_type_Apartment), 
+            condo = sum(property_type_Condominium), 
+            townhouse = sum(property_type_Townhouse), 
+            house = sum(property_type_House), 
+            loft = sum(property_type_Loft)) %>%
+  mutate(totalproperties = apt + condo +townhouse + house + loft) %>%
+  filter(totalproperties > 20)
+
+```
+
+
+```{r, echo = FALSE}
+bookings_by_neighborhood %>%
+  group_by(neighbourhood) %>%
+  summarize(avgpercentage = mean(avgpercentage)) %>%
+  filter(neighbourhood %in% housing_enough$neighbourhood) %>%
+  arrange(desc(avgpercentage)) %>%
+  head(25) %>%
+  ggplot() + geom_bar(aes(x = reorder(neighbourhood, -avgpercentage), y = avgpercentage), stat = 'identity', fill = 'turquoise') + coord_flip() + theme_minimal() + labs(title = "Top 25 Most Booked Neighborhoods", x = "Neighborhood", y = "Percent Booked", subtitle = "(1 year, > 20 properties)") #reorder is an amazing way to change column order!
+```
+
+
+I wonder why South Lake Union is so highly booked. I checked, and it doesn't have the most or least expensive housing. Perhaps the most number of superhosts?
+
+
+```{r, echo = FALSE}
+housing_points_dummied <- fastDummies::dummy_cols(housing_points_dummied, select_columns = "host_is_superhost", remove_first_dummy = TRUE)
+
+housing_points_dummied %>%
+  filter(host_is_superhost_t == 1) %>%
+  distinct(id, .keep_all = TRUE) %>%
+  group_by(neighbourhood) %>%
+  summarize(superhost_properties = n()) %>%
+  arrange(desc(superhost_properties))
+
+```
+
+
+To check this quickly, I compared the average rent per night - a broad way to gague the accessibility of public transportation, nice neighborhood, etc:
+
+```{r}
+housing_points_dummied %>%
+  group_by(neighbourhood) %>%
+  summarize(meanprice = mean(price)) %>%
+  arrange(desc(meanprice)) %>%
+  head()
+```
+
+Looking at Google, South Lake Union is "A booming hub for Amazon and the biotech industry, South Lake Union is crammed with buzzing bars, hip eateries and lunchtime food trucks", and the various Amazon buildings are clearly evident. While I think of a better way to numerically justify South Lake Union's high booking rate, I'll chalk it up to its centrality to Amazon, as you can see:
+
+```{r pressure, echo=FALSE, out.width = '70%'}
+knitr::include_graphics("southlakeunion.png")
+
+```
+
+
+
+
+# Prices in general: 
+
+First, I obtained the 'space' (blurb of the Airbnb listing) and customer reviews. 
+```{r}
+textdata <- reviewed_listings%>%
+  select(id, space, comments,review_scores_rating, review_scores_accuracy, review_scores_cleanliness, review_scores_communication, month)
+
+```
+
+```{r, echo = FALSE, cache = TRUE}
+
+fulltextclean <- function(thetext){
+  
+  rem <- c(stopwords(), 
+           as.character(pos_df_pronouns[,1]),
+           as.character(pos_interjections))
+  
+  clean <- replace_symbol(thetext)
+  clean <- tolower(clean) 
+  clean <- removeNumbers(clean)
+  clean <- removePunctuation(clean)
+  clean <- removeWords(clean, rem)
+  clean <- stripWhitespace(clean) #get rid of weird extra whitespace
+  
+  cleaned <- str_replace(clean, "[^a-zA-Z\\s]", "") #removes any other weird symbols
+  
+  return(cleaned)
+}
+
+textdata$comments <- fulltextclean(textdata$comments) 
+```
+
+
+
+Past the location-specific popularity, there is clearly a wide price range to be found:
+```{r}
+reviewed_listings%>%
+  distinct(id, .keep_all = TRUE) %>%
+  ggplot(aes(price)) + geom_density(fill = 'turquoise', alpha = 0.6) 
+
+```
+
+```{r, echo = FALSE}
+reviewed_listings%>%
+  distinct(id, .keep_all = TRUE) %>%
+  select(price)%>%
+  quantile(na.rm = TRUE) %>%
+  kable()
+```
+
+
+# First-time Topic Modelling
+
+Reading online about text mining and language processing, I came across this interesting process called Latent Dirichlet Allocation (LDA) which can be used to discover topics within a mass of text. Given a price range, the [author uses it to classify](https://towardsdatascience.com/improving-airbnb-yield-prediction-with-text-mining-9472c0181731) *Budget, Luxury, and Location* focused Airbnbs. I wanted to see if I could separate the Seattle Airbnbs into similar groupings. 
+
+Looking online, the 'description' is what counts the most to attracting customers, so we'll parse that. First, I selected all descriptions from the listings file and removed empty ones. Then to focus on important differences, I removed common English words and funny symbols using the $tm$, $lexicon$, and $stringr$ packages, using this function:
+
+```{r}
+fulltextclean <- function(thetext){
+  
+  rem <- c(stopwords(),    #putting together a list of common words to remove
+           as.character(pos_df_pronouns[,1]),
+           as.character(pos_interjections))
+  
+  clean <- replace_symbol(thetext)
+  clean <- tolower(clean)  # removes capitalization 
+  clean <- removeNumbers(clean)
+  clean <- removePunctuation(clean)
+  clean <- removeWords(clean, rem)
+  clean <- stripWhitespace(clean) #get rid of weird extra whitespace
+  
+  cleaned <- str_replace(clean, "[^a-zA-Z\\s]", "") #removes any other weird symbols
+  
+  return(cleaned)
+}
+```
+
+```{r, cache=TRUE}
+
+listing_descriptions <- listings %>%
+  select(description) %>%
+  filter(!description == "") #remove empty descriptions!
+```
+
+After applying the text-cleaning function, I was able to turn the list into a Document Term Matrix, which tracks the frequency that words occur in the given body of text. From what I read and understood, it's almost like encoding dummy variables for each word and keeping track of what occurs in each document (in this case, each row is one specific listing). 
+
+```{r, echo = FALSE}
+list_desc <- fulltextclean(listing_descriptions$description) 
+
+list.corpus <- Corpus(VectorSource(list_desc)) 
+list.dtm <- DocumentTermMatrix(list.corpus) 
+
+l_rowTotals <- apply(list.dtm, 1, sum)      
+l_dtm.new   <- list.dtm[l_rowTotals> 0, ]    
+
+listmodel <- LDA(l_dtm.new, 3)
+list_lda.terms <- as.matrix(terms(listmodel,100))
+
+```
+
+
+Sadly, the markdown doesn't like it when I leave the code above alone, so I've had to comment it out. 
+
+
+```{r, cache = TRUE, echo = FALSE}
+
+listing_terms <- read.csv("/Users/joshupadhyay/mywebsite/listing_terms.csv")
+
+listing_terms %>%
+  select(-X) %>%
+  head(15)%>%
+  kable()
+
+```
+
+Oof. Looks like Seattle hosts are less diverse in their descriptions compared to London, the dataset the author used (https://towardsdatascience.com/nlp-extracting-the-main-topics-from-your-dataset-using-lda-in-minutes-21486f5aa925). The topics seem too interrelated to be of much use. 
+
+
+
+
+# LDA / Topic Modelling Takeaway:
+It seems like a very nice way to gain extra insights from a dataset, but it didn't work too well in my case. I'm sure there's a method to remove shared words I could explore, or try with a more diverse dataset (topic modelling and LDA in particular seems to work really well on different news articles, understandably).
+
+
+```{r, cache = TRUE, echo = FALSE}
+
+pal <- brewer.pal(8, "Dark2")
+wordcloud(textdata$comments, min.freq=2, max.words = 150, random.order = TRUE, col = pal)
+
+
+```
+
+Tried LDA with the reviews and got a similar result, so here's a wordcloud instead!
+
+```{r, cache = TRUE, echo = FALSE}
+'
+rowTotals <- apply(dtm_comments, 1, sum) #Find the sum of words in each Document
+dtm.new   <- dtm_comments[rowTotals> 0, ]           #remove all docs without words
+
+model <- LDA(dtm.new, 3)
+
+ldaout.topics <- as.matrix(topics(model))
+
+ldaout.terms <- as.matrix(terms(model, 100))
+'
+
+lda_terms <- read.csv("/Users/joshupadhyay/mywebsite/ldaout_terms.csv") #had to read the results back in as a csv file as my markdown wouldn't knit for some reason :) 
+
+lda_topics <- read.csv("/Users/joshupadhyay/mywebsite/ldaout_topics.csv")
+
+lda_terms %>%
+  select(-(X))%>% 
+  head(15) %>%
+  kable()
+
+
+```
+
+And... ah man! Seems like the Airbnb comments are really homoegenous, with words like "great" and "comfortable" and "house" appearing in all 3 topics. 
+
+
+
+#Bonus: Illegal Airbnbs in Seattle? 
+```{r, cache=TRUE, echo = FALSE}
+ownership_distribution <- housing_points_dummied %>%
+  distinct(id, .keep_all =  TRUE) %>%
+  group_by(host_id) %>%
+  summarize(num_properties = n())
+  
+ 
+ownership_distribution$host_id<- as.factor(ownership_distribution$host_id)
+  
+
+ownership_distribution %>%
+  arrange(desc(num_properties)) %>%
+  head(25) %>%
+  ggplot(aes(x = reorder(host_id, -num_properties), y = num_properties)) + 
+  geom_bar(stat = 'identity', fill = 'turquoise') + coord_flip() + 
+  labs(title = "Breaking the Law?", y = 'Properties Owned', x = 'Host IDs', subtitle = "The 25 Biggest Offenders") + theme_minimal()
+
+```
+As an added bonus, after seeing a kernel on Kaggle where people examined Airbnb ownership distribution, I was curious how it looked like in Seattle. Clearly some people have turned it into a full time business! According to this news article I read, Seattle residents are limited to max 2 properties per host (unless you have a special license), so such high ownership could be illegal. By filtering out people who owned more than 2 properties, **over 169 people are guilty of this**. 
+
+Hope they're aware of simple data science!
+
+(Looking at you and your 46 properties especially, Daniela!)
+```{r}
+listings%>%
+  filter(host_id == 8534462)%>%
+  distinct(host_name)
+```
+
+https://www.geekwire.com/2017/seattle-approves-new-airbnb-regulations-limit-short-term-rentals-2-units-per-host/
+
+
+
+
+
+
